@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Geospatial Measurement API</title>
+  <style>
+    :root { color-scheme: light; --ink:#10233d; --muted:#61728a; --line:#dce4ef; --bg:#f6f8fb; --card:#fff; --brand:#1368ce; --success:#157347; --warn:#a36200; }
+    * { box-sizing: border-box; } body { margin:0; color:var(--ink); background:var(--bg); font:15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+    header { background:linear-gradient(120deg,#0c2d56,#1368ce); color:#fff; padding:48px max(24px,calc((100vw - 1080px)/2)); }
+    header h1 { margin:0 0 8px; font-size:clamp(28px,4vw,42px); letter-spacing:-.03em; } header p { max-width:670px; margin:0; opacity:.9; }
+    main { max-width:1080px; margin:32px auto 64px; padding:0 24px; display:grid; gap:24px; } .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:24px; box-shadow:0 8px 24px rgba(28,53,85,.05); }
+    h2 { margin:0 0 6px; font-size:21px; } .hint { margin:0 0 18px; color:var(--muted); } .upload-row { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+    input[type=file] { max-width:100%; padding:10px; border:1px dashed #9fb2ca; border-radius:8px; background:#f9fbfe; } button { appearance:none; border:0; cursor:pointer; border-radius:8px; background:var(--brand); color:#fff; padding:11px 17px; font-weight:700; } button:disabled { opacity:.55; cursor:wait; } .status { min-height:23px; margin:14px 0 0; color:var(--muted); } .status.error { color:#b42318; } .status.success { color:var(--success); }
+    .result { display:none; } .result.visible { display:block; } .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin:18px 0; } .metric { padding:15px; border-radius:10px; background:#f2f7fd; } .metric strong { display:block; font-size:21px; } .metric span { color:var(--muted); font-size:13px; }
+    .meta { color:var(--muted); margin-bottom:14px; } .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-weight:700; font-size:12px; background:#e8f5ed; color:var(--success); } .warnings { padding-left:20px; color:var(--warn); }
+    table { width:100%; border-collapse:collapse; } th,td { padding:10px 8px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; } th { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; } .empty { color:var(--muted); text-align:center; padding:22px; } a { color:var(--brand); } footer { color:var(--muted); font-size:13px; text-align:center; padding:0 24px 36px; }
+    @media (max-width:620px) { .card { padding:18px; } th:nth-child(3),td:nth-child(3) { display:none; } }
+  </style>
+</head>
+<body>
+  <header><h1>Geospatial Measurement API</h1><p>Upload a KML or Shapefile ZIP to inspect its features and calculate projected area or length measurements.</p></header>
+  <main>
+    <section class="card"><h2>Upload a file</h2><p class="hint">Accepted formats: <code>.kml</code> and <code>.zip</code> containing a Shapefile. Processing happens immediately.</p>
+      <form id="upload-form"><div class="upload-row"><input id="file" name="file" type="file" accept=".kml,.zip,.kmz" required><button id="submit" type="submit">Process file</button></div></form><p id="status" class="status" aria-live="polite"></p>
+    </section>
+    <section id="result" class="card result" aria-live="polite"><h2 id="result-title">Results</h2><p id="result-meta" class="meta"></p><div id="metrics" class="metrics"></div><h3>Feature measurements</h3><div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Geometry</th><th>Status</th><th>Area</th><th>Length</th><th>Method</th></tr></thead><tbody id="measurements"></tbody></table></div><ul id="warnings" class="warnings"></ul></section>
+    <section class="card"><h2>Recent uploads</h2><p class="hint">Select a completed upload to view its measurements.</p><div style="overflow-x:auto"><table><thead><tr><th>Filename</th><th>Status</th><th>Features</th><th>CRS</th><th></th></tr></thead><tbody id="uploads"><tr><td class="empty" colspan="5">Loading uploads…</td></tr></tbody></table></div></section>
+  </main>
+  <footer>API reference: <a href="/docs">Swagger UI</a></footer>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const nf = new Intl.NumberFormat(undefined, {maximumFractionDigits: 2});
+    const fmt = (v, unit) => v == null ? '—' : `${nf.format(v)} ${unit}`;
+    function setStatus(message, type='') { const node=$('status'); node.textContent=message; node.className=`status ${type}`; }
+    function escapeHtml(value) { const d=document.createElement('div'); d.textContent=value ?? ''; return d.innerHTML; }
+    async function request(url, options) { const r=await fetch(url, options); const data=await r.json().catch(()=>({})); if (!r.ok) throw new Error(data.detail || data.error_message || `Request failed (${r.status})`); return data; }
+    function metric(label, value) { return `<div class="metric"><strong>${value}</strong><span>${label}</span></div>`; }
+    async function showFile(file) {
+      if (file.status !== 'COMPLETED') { setStatus(`“${file.filename}” was not processed: ${file.error_message || file.status}.`, 'error'); return; }
+      const data=await request(`/api/files/${file.id}/measurements/`);
+      $('result').classList.add('visible'); $('result-title').textContent=file.filename;
+      $('result-meta').innerHTML=`<span class="badge">${escapeHtml(file.status)}</span> ${data.total} feature${data.total===1?'':'s'} · ${escapeHtml(file.crs || 'Unknown CRS')}`;
+      const s=data.summary; $('metrics').innerHTML=[metric('Total area',fmt(s.total_area_hectares,'ha')),metric('Total length',fmt(s.total_length_km,'km')),metric('Measured features',s.by_measurement_status.MEASURED || 0),metric('Other features',data.total-(s.by_measurement_status.MEASURED || 0))].join('');
+      $('measurements').innerHTML=data.results.map(r=>`<tr><td>${r.feature_id}</td><td>${escapeHtml(r.geometry_type || 'No geometry')}</td><td>${escapeHtml(r.measurement_status)}</td><td>${fmt(r.area_hectares,'ha')}</td><td>${fmt(r.length_km,'km')}</td><td>${escapeHtml(r.measurement_method || r.measurement_note || '—')}</td></tr>`).join('') || '<tr><td class="empty" colspan="6">No features found.</td></tr>';
+      $('warnings').innerHTML=(file.warnings || []).map(w=>`<li>${escapeHtml(w)}</li>`).join('');
+      $('result').scrollIntoView({behavior:'smooth',block:'start'});
+    }
+    async function loadUploads() {
+      try { const data=await request('/api/files/?limit=50'); $('uploads').innerHTML=data.results.map(f=>`<tr><td>${escapeHtml(f.filename)}</td><td>${escapeHtml(f.status)}</td><td>${f.feature_count}</td><td>${escapeHtml(f.crs || 'Unknown')}</td><td><button data-id="${f.id}" ${f.status !== 'COMPLETED' ? 'disabled' : ''}>View</button></td></tr>`).join('') || '<tr><td class="empty" colspan="5">No uploads yet.</td></tr>'; data.results.forEach(f=>{ const b=document.querySelector(`[data-id="${f.id}"]`); if(b) b.onclick=()=>showFile(f).catch(e=>setStatus(e.message,'error')); }); } catch(e) { $('uploads').innerHTML=`<tr><td class="empty" colspan="5">Could not load uploads: ${escapeHtml(e.message)}</td></tr>`; }
+    }
+    $('upload-form').addEventListener('submit', async (event) => { event.preventDefault(); const file=$('file').files[0]; if(!file) return; $('submit').disabled=true; setStatus(`Processing ${file.name}…`); try { const data=await request('/api/files/',{method:'POST',body:new FormData(event.target)}); setStatus(`${data.filename} processed successfully.`, 'success'); await showFile(data); await loadUploads(); } catch(e) { setStatus(e.message,'error'); } finally { $('submit').disabled=false; } });
+    loadUploads();
+  </script>
+</body>
+</html>

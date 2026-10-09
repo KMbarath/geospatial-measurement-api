@@ -21,7 +21,7 @@ pip install -r requirements-dev.txt
 uvicorn app.main:app --reload
 ```
 
-Open <http://127.0.0.1:8000/docs>. A SQLite DB and uploaded files are created under `./data/`.
+Open <http://127.0.0.1:8000/> for the browser dashboard or <http://127.0.0.1:8000/docs> for Swagger UI. A SQLite DB and uploaded files are created under `./data/`.
 
 ### Docker
 
@@ -69,6 +69,12 @@ All endpoints are under `/api/files/`. Interactive reference: `/docs`.
 | GET | `/api/files/` | List uploads |
 | DELETE | `/api/files/{id}/` | Delete a file, its features and stored upload |
 | GET | `/health` | Liveness probe |
+
+### Browser dashboard
+
+The root route (`/`) provides a no-build browser interface for uploading files, inspecting
+per-feature measurements, and reopening recent uploads. It uses the same public API endpoints
+described below; Swagger UI remains available at `/docs`.
 
 ### `POST /api/files/`
 
@@ -244,9 +250,15 @@ otherwise: drop Z → transform to WGS84 → validate lon/lat range → project 
 * Only 2-D measurement: Z values are ignored (area/length are planimetric).
 * A projection is built per feature (transformers are LRU-cached); very large files (100k+ features) would benefit from batching features by region and vectorising.
 
+## 5. Submission checklist
+
+Before sharing the project, run the checks in [SUBMISSION_CHECKLIST.md](SUBMISSION_CHECKLIST.md).
+In particular, confirm that the repository is public and that the shared GitHub URL opens without
+sign-in.
+
 ---
 
-## 5. Learnings
+## 6. Learnings
 
 * **Never trust "degrees" for area/length** – a 0.01°×0.01° box has an "area" of 0.0001 in raw coordinates but ≈0.7 km² in reality; this is covered by a dedicated test.
 * **CRS choice is per-purpose**: equal-area projections are right for area, conformal ones for distance; there is no single best CRS.
@@ -255,7 +267,7 @@ otherwise: drop Z → transform to WGS84 → validate lon/lat range → project 
 * **Validating against an independent oracle** (PyProj `Geod`) caught more than hand-computed expectations would.
 * Upload endpoints are an attack surface: zip-slip, zip bombs and XML entity bombs were worth designing in from the start.
 
-## 6. Future scope
+## 7. Future scope
 
 * Background processing (Celery/RQ/ARQ) with polling or webhooks for very large files; progress reporting.
 * PostgreSQL/PostGIS: spatial indexes, bbox / intersects queries, storing geometries natively.

@@ -288,3 +288,10 @@ def test_pagination_filters_and_delete(upload, client, settings):
 def test_health_and_openapi(client):
     assert client.get("/health").json() == {"status": "ok"}
     assert "/api/files/" in client.get("/openapi.json").json()["paths"]
+
+
+def test_browser_dashboard_is_served(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Geospatial Measurement API" in response.text
+    assert 'id="upload-form"' in response.text

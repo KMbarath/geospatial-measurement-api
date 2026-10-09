@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse
 
 from app.api.files import router as files_router
 from app.config import Settings, get_settings
@@ -45,7 +45,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     def root():
-        return RedirectResponse("/docs")
+        return FileResponse(Path(__file__).parent / "static" / "index.html")
 
     return app
 
